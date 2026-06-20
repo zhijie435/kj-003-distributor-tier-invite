@@ -2,6 +2,7 @@
 
 use Illuminate\Session\Driver\FileDriver;
 use Illuminate\Session\Driver\RedisDriver;
+use Illuminate\Support\Str;
 
 return [
 
@@ -25,7 +26,7 @@ return [
 
     'cookie' => env(
         'SESSION_COOKIE',
-        str_slug(env('APP_NAME', 'laravel'), '_').'_session'
+        Str::slug(env('APP_NAME', 'laravel'), '_').'_session'
     ),
 
     'path' => env('SESSION_PATH', '/'),
