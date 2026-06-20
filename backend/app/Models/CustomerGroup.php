@@ -29,7 +29,7 @@ class CustomerGroup extends Model
 
     public function models()
     {
-        return $this->morphToMany(
+        return $this->morphedByMany(
             config('customer_groups.models.customer'),
             'model',
             config('customer_groups.table_names.model_has_customer_groups'),
