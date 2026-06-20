@@ -19,6 +19,12 @@ class ProductCustomerGroupPrice extends Model
         'price' => 'float',
     ];
 
+    protected $appends = [
+        'formatted_price',
+        'is_active',
+        'status',
+    ];
+
     protected function price(): Attribute
     {
         return Attribute::make(
@@ -27,22 +33,62 @@ class ProductCustomerGroupPrice extends Model
         );
     }
 
-    protected $appends = [
-        'formatted_price',
-    ];
-
     protected function getFormattedPriceAttribute()
     {
         return number_format($this->price, 2, '.', '');
     }
 
+    protected function getIsActiveAttribute()
+    {
+        if (! $this->relationLoaded('product') || ! $this->relationLoaded('customerGroup')) {
+            $this->load(['product', 'customerGroup']);
+        }
+
+        return $this->product && $this->product->is_active
+            && $this->customerGroup && $this->customerGroup->is_active;
+    }
+
+    protected function getStatusAttribute()
+    {
+        if (! $this->relationLoaded('product') || ! $this->relationLoaded('customerGroup')) {
+            $this->load(['product', 'customerGroup']);
+        }
+
+        $status = [];
+
+        if (! $this->product) {
+            $status[] = '产品已删除';
+        } elseif (! $this->product->is_active) {
+            $status[] = '产品已禁用';
+        }
+
+        if (! $this->customerGroup) {
+            $status[] = '客户组已删除';
+        } elseif (! $this->customerGroup->is_active) {
+            $status[] = '客户组已禁用';
+        }
+
+        return empty($status) ? '正常' : implode('、', $status);
+    }
+
+    public function scopeActive($query)
+    {
+        return $query->whereHas('product', fn ($q) => $q->active())
+            ->whereHas('customerGroup', fn ($q) => $q->active());
+    }
+
+    public function scopeWithRelations($query)
+    {
+        return $query->with(['product' => fn ($q) => $q->withTrashed(), 'customerGroup' => fn ($q) => $q->withTrashed()]);
+    }
+
     public function product()
     {
-        return $this->belongsTo(Product::class);
+        return $this->belongsTo(Product::class)->withTrashed();
     }
 
     public function customerGroup()
     {
-        return $this->belongsTo(CustomerGroup::class);
+        return $this->belongsTo(CustomerGroup::class)->withTrashed();
     }
 }

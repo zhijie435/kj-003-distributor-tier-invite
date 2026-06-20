@@ -28,13 +28,14 @@ class ProductController extends Controller
 
         if ($request->has('with_prices') && $request->boolean('with_prices')) {
             $customerGroupId = $request->input('customer_group_id');
-            $query->withPrices($customerGroupId);
+            $activeOnly = ! $request->has('include_inactive') || ! $request->boolean('include_inactive');
+            $query->withPrices($customerGroupId, $activeOnly);
         }
 
         $products = $query->ordered()->paginate($request->input('per_page', 15));
 
         $items = collect($products->items())->map(function ($product) {
-            return [
+            $data = [
                 'id' => $product->id,
                 'name' => $product->name,
                 'sku' => $product->sku,
@@ -45,10 +46,29 @@ class ProductController extends Controller
                 'sort_order' => $product->sort_order,
                 'created_at' => $product->created_at,
                 'updated_at' => $product->updated_at,
-                'customer_group_prices' => $product->relationLoaded('customerGroupPrices')
-                    ? $product->customerGroupPrices
-                    : null,
             ];
+
+            if ($product->relationLoaded('customerGroupPrices')) {
+                $data['customer_group_prices'] = $product->customerGroupPrices->map(function ($price) {
+                    return [
+                        'id' => $price->id,
+                        'product_id' => $price->product_id,
+                        'customer_group_id' => $price->customer_group_id,
+                        'customer_group' => $price->customerGroup ? [
+                            'id' => $price->customerGroup->id,
+                            'name' => $price->customerGroup->name,
+                            'code' => $price->customerGroup->code,
+                            'is_active' => $price->customerGroup->is_active,
+                        ] : null,
+                        'price' => $price->price,
+                        'formatted_price' => $price->formatted_price,
+                        'is_active' => $price->is_active,
+                        'status' => $price->status,
+                    ];
+                });
+            }
+
+            return $data;
         });
 
         return response()->json([
@@ -72,9 +92,14 @@ class ProductController extends Controller
         ], 201);
     }
 
-    public function show(Product $product): JsonResponse
+    public function show(Request $request, Product $product): JsonResponse
     {
-        $product->load('customerGroupPrices.customerGroup');
+        $product->load(['customerGroupPrices' => function ($q) {
+            $q->with(['customerGroup' => fn ($subQ) => $subQ->withTrashed()]);
+        }]);
+
+        $activeOnly = ! $request->has('include_inactive') || ! $request->boolean('include_inactive');
+        $allPrices = $product->getAllCustomerGroupPrices($activeOnly);
 
         return response()->json([
             'data' => [
@@ -88,8 +113,27 @@ class ProductController extends Controller
                 'sort_order' => $product->sort_order,
                 'created_at' => $product->created_at,
                 'updated_at' => $product->updated_at,
-                'customer_group_prices' => $product->getAllCustomerGroupPrices(),
-                'raw_prices' => $product->customerGroupPrices,
+                'customer_group_prices' => $allPrices,
+                'raw_prices' => $product->customerGroupPrices->map(function ($price) {
+                    return [
+                        'id' => $price->id,
+                        'product_id' => $price->product_id,
+                        'customer_group_id' => $price->customer_group_id,
+                        'customer_group' => $price->customerGroup ? [
+                            'id' => $price->customerGroup->id,
+                            'name' => $price->customerGroup->name,
+                            'code' => $price->customerGroup->code,
+                            'is_active' => $price->customerGroup->is_active,
+                            'deleted_at' => $price->customerGroup->deleted_at,
+                        ] : null,
+                        'price' => $price->price,
+                        'formatted_price' => $price->formatted_price,
+                        'is_active' => $price->is_active,
+                        'status' => $price->status,
+                        'created_at' => $price->created_at,
+                        'updated_at' => $price->updated_at,
+                    ];
+                }),
             ],
         ]);
     }
@@ -131,7 +175,8 @@ class ProductController extends Controller
 
         if ($request->has('with_prices') && $request->boolean('with_prices')) {
             $customerGroupId = $request->input('customer_group_id');
-            $query->withPrices($customerGroupId);
+            $activeOnly = ! $request->has('include_inactive') || ! $request->boolean('include_inactive');
+            $query->withPrices($customerGroupId, $activeOnly);
         }
 
         $products = $query->get();
@@ -143,10 +188,27 @@ class ProductController extends Controller
                 'sku' => $product->sku,
                 'base_price' => $product->base_price,
                 'formatted_base_price' => number_format($product->base_price, 2, '.', ''),
+                'is_active' => $product->is_active,
             ];
 
             if ($product->relationLoaded('customerGroupPrices')) {
-                $data['customer_group_prices'] = $product->customerGroupPrices;
+                $data['customer_group_prices'] = $product->customerGroupPrices->map(function ($price) {
+                    return [
+                        'id' => $price->id,
+                        'product_id' => $price->product_id,
+                        'customer_group_id' => $price->customer_group_id,
+                        'customer_group' => $price->customerGroup ? [
+                            'id' => $price->customerGroup->id,
+                            'name' => $price->customerGroup->name,
+                            'code' => $price->customerGroup->code,
+                            'is_active' => $price->customerGroup->is_active,
+                        ] : null,
+                        'price' => $price->price,
+                        'formatted_price' => $price->formatted_price,
+                        'is_active' => $price->is_active,
+                        'status' => $price->status,
+                    ];
+                });
             }
 
             return $data;
