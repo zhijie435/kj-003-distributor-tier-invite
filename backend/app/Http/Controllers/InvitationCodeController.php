@@ -2,280 +2,282 @@
 
 namespace App\Http\Controllers;
 
+use App\Exceptions\InvitationCodeException;
 use App\Http\Requests\InvitationCodeRequest;
 use App\Models\CustomerGroup;
 use App\Models\InvitationCode;
+use App\Services\InvitationCodeService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
+use Throwable;
 
 class InvitationCodeController extends Controller
 {
+    public function __construct(
+        protected InvitationCodeService $service
+    ) {}
+
     public function index(Request $request): JsonResponse
     {
-        $query = InvitationCode::with(['customerGroup' => fn ($q) => $q->withTrashed()]);
+        $this->service->authorize('viewAny', InvitationCode::class);
 
-        if ($request->has('customer_group_id')) {
-            $query->forGroup($request->input('customer_group_id'));
-        }
-
-        if ($request->has('active') && $request->boolean('active')) {
-            $query->active();
-        }
-
-        if ($request->has('is_valid') && $request->boolean('is_valid')) {
-            $query->active()->notExpired();
-        }
-
-        if ($request->has('search')) {
-            $search = $request->input('search');
-            $query->where(function ($q) use ($search) {
-                $q->where('code', 'like', "%{$search}%")
-                    ->orWhere('description', 'like', "%{$search}%");
-            });
-        }
+        $filters = $request->only([
+            'customer_group_id', 'status', 'active', 'is_valid',
+            'search', 'include_trashed', 'only_trashed',
+        ]);
 
         if ($request->has('include_inactive') && $request->boolean('include_inactive')) {
-            $query->withTrashed();
+            $filters['include_trashed'] = true;
         }
 
-        $invitationCodes = $query->orderByDesc('created_at')->paginate($request->input('per_page', 15));
+        $perPage = (int) $request->input('per_page', 15);
+        $page = (int) $request->input('page', 1);
 
-        $items = collect($invitationCodes->items())->map(function ($code) {
-            return $this->formatInvitationCode($code);
+        $paginator = $this->service->paginate($filters, $perPage, $page);
+
+        $items = collect($paginator->items())->map(function ($code) {
+            return $this->service->formatInvitationCode($code);
         });
 
         return response()->json([
             'data' => $items,
             'pagination' => [
-                'total' => $invitationCodes->total(),
-                'per_page' => $invitationCodes->perPage(),
-                'current_page' => $invitationCodes->currentPage(),
-                'last_page' => $invitationCodes->lastPage(),
+                'total' => $paginator->total(),
+                'per_page' => $paginator->perPage(),
+                'current_page' => $paginator->currentPage(),
+                'last_page' => $paginator->lastPage(),
             ],
         ]);
     }
 
     public function store(InvitationCodeRequest $request): JsonResponse
     {
-        $data = $request->validated();
+        try {
+            $invitationCode = $this->service->create(
+                $request->validatedData()
+            );
 
-        if (empty($data['code'])) {
-            unset($data['code']);
+            return response()->json([
+                'message' => '邀请码创建成功',
+                'data' => $this->service->formatInvitationCode($invitationCode),
+            ], 201);
+        } catch (InvitationCodeException $e) {
+            return $e->render();
         }
-
-        $invitationCode = InvitationCode::create($data);
-        $invitationCode->load(['customerGroup' => fn ($q) => $q->withTrashed()]);
-
-        return response()->json([
-            'message' => '邀请码创建成功',
-            'data' => $this->formatInvitationCode($invitationCode),
-        ], 201);
     }
 
-    public function show(InvitationCode $invitationCode): JsonResponse
+    public function show(Request $request, InvitationCode $invitationCode): JsonResponse
     {
+        $this->service->authorize('view', $invitationCode);
+
         $invitationCode->load([
             'customerGroup' => fn ($q) => $q->withTrashed(),
             'usages.user',
         ]);
 
         return response()->json([
-            'data' => array_merge($this->formatInvitationCode($invitationCode), [
-                'usages' => $invitationCode->usages->map(function ($usage) {
-                    return [
-                        'id' => $usage->id,
-                        'user' => $usage->user ? [
-                            'id' => $usage->user->id,
-                            'name' => $usage->user->name,
-                            'email' => $usage->user->email,
-                        ] : null,
-                        'created_at' => $usage->created_at,
-                    ];
-                }),
-            ]),
+            'data' => array_merge(
+                $this->service->formatInvitationCode($invitationCode),
+                ['usages' => $this->service->formatUsages($invitationCode)]
+            ),
         ]);
     }
 
     public function update(InvitationCodeRequest $request, InvitationCode $invitationCode): JsonResponse
     {
-        $invitationCode->update($request->validated());
-        $invitationCode->fresh()->load(['customerGroup' => fn ($q) => $q->withTrashed()]);
+        try {
+            $invitationCode = $this->service->update(
+                $invitationCode,
+                $request->validatedData()
+            );
 
-        return response()->json([
-            'message' => '邀请码更新成功',
-            'data' => $this->formatInvitationCode($invitationCode),
-        ]);
+            return response()->json([
+                'message' => '邀请码更新成功',
+                'data' => $this->service->formatInvitationCode($invitationCode),
+            ]);
+        } catch (InvitationCodeException $e) {
+            return $e->render();
+        }
     }
 
     public function destroy(InvitationCode $invitationCode): JsonResponse
     {
-        $invitationCode->delete();
+        $this->service->authorize('delete', $invitationCode);
 
-        return response()->json([
-            'message' => '邀请码删除成功',
-        ]);
+        try {
+            $this->service->delete($invitationCode);
+
+            return response()->json([
+                'message' => '邀请码删除成功',
+            ]);
+        } catch (InvitationCodeException $e) {
+            return $e->render();
+        }
     }
 
     public function toggleActive(InvitationCode $invitationCode): JsonResponse
     {
-        $invitationCode->update([
-            'is_active' => ! $invitationCode->is_active,
-        ]);
+        $this->service->authorize('toggleActive', $invitationCode);
 
-        $invitationCode->load(['customerGroup' => fn ($q) => $q->withTrashed()]);
+        try {
+            $invitationCode = $this->service->toggleActive($invitationCode);
 
-        return response()->json([
-            'message' => '邀请码状态更新成功',
-            'data' => $this->formatInvitationCode($invitationCode->fresh()),
-        ]);
+            return response()->json([
+                'message' => '邀请码状态更新成功',
+                'data' => $this->service->formatInvitationCode($invitationCode),
+            ]);
+        } catch (InvitationCodeException $e) {
+            return $e->render();
+        }
     }
 
     public function redeem(Request $request): JsonResponse
     {
-        $validated = $request->validate([
-            'code' => 'required|string',
-        ]);
+        $this->service->authorize('redeem', InvitationCode::class);
 
-        $invitationCode = InvitationCode::where('code', strtoupper($validated['code']))->first();
+        try {
+            $validated = $request->validate([
+                'code' => 'required|string',
+                'user_id' => 'nullable|exists:users,id',
+            ]);
 
-        if (! $invitationCode) {
-            return response()->json([
-                'message' => '邀请码不存在',
-            ], 404);
-        }
-
-        if (! $invitationCode->is_valid) {
-            $reason = '邀请码无效';
-            if ($invitationCode->is_expired) {
-                $reason = '邀请码已过期';
-            } elseif ($invitationCode->is_used_up) {
-                $reason = '邀请码已用完';
-            } elseif (! $invitationCode->is_active) {
-                $reason = '邀请码已禁用';
+            $user = $request->user();
+            if (! $user && ! empty($validated['user_id'])) {
+                $user = \App\Models\User::find($validated['user_id']);
             }
 
+            if (! $user) {
+                throw InvitationCodeException::unauthorized('使用邀请码');
+            }
+
+            $result = $this->service->redeem($validated['code'], $user);
+
             return response()->json([
-                'message' => $reason,
-            ], 422);
-        }
-
-        $user = $request->user();
-
-        if (! $user) {
-            $validated = $request->validate([
-                'user_id' => 'required|exists:users,id',
+                'message' => '邀请码使用成功',
+                'data' => $result,
             ]);
-            $user = \App\Models\User::find($validated['user_id']);
-        }
-
-        if ($invitationCode->usages()->where('user_id', $user->id)->exists()) {
+        } catch (ValidationException $e) {
             return response()->json([
-                'message' => '您已使用过该邀请码',
+                'message' => '数据验证失败',
+                'error_code' => InvitationCodeException::VALIDATION_ERROR,
+                'errors' => $e->errors(),
             ], 422);
-        }
-
-        $result = $invitationCode->apply($user);
-
-        if (! $result) {
+        } catch (InvitationCodeException $e) {
+            return $e->render();
+        } catch (Throwable $e) {
+            report($e);
             return response()->json([
                 'message' => '邀请码使用失败',
-            ], 422);
+                'error_code' => InvitationCodeException::CODE_APPLY_FAILED,
+            ], 500);
         }
-
-        $invitationCode->load(['customerGroup' => fn ($q) => $q->withTrashed()]);
-
-        return response()->json([
-            'message' => '邀请码使用成功',
-            'data' => [
-                'invitation_code' => $this->formatInvitationCode($invitationCode),
-                'customer_group' => [
-                    'id' => $invitationCode->customerGroup->id,
-                    'name' => $invitationCode->customerGroup->name,
-                    'code' => $invitationCode->customerGroup->code,
-                ],
-            ],
-        ]);
     }
 
     public function batchGenerate(Request $request): JsonResponse
     {
-        $validated = $request->validate([
-            'customer_group_id' => 'required|exists:customer_groups,id',
-            'count' => 'required|integer|min:1|max:100',
-            'description' => 'nullable|string|max:255',
-            'max_uses' => 'integer|min:0',
-            'expires_at' => 'nullable|date|after:now',
-            'code_length' => 'integer|min:4|max:20',
-        ]);
+        $this->service->authorize('batchGenerate', InvitationCode::class);
 
-        $count = $validated['count'];
-        $codeLength = $validated['code_length'] ?? 8;
-        $codes = [];
-
-        for ($i = 0; $i < $count; $i++) {
-            $codes[] = InvitationCode::create([
-                'customer_group_id' => $validated['customer_group_id'],
-                'description' => $validated['description'] ?? null,
-                'max_uses' => $validated['max_uses'] ?? 0,
-                'expires_at' => $validated['expires_at'] ?? null,
-                'code_length' => $codeLength,
+        try {
+            $validated = $request->validate([
+                'customer_group_id' => 'required|exists:customer_groups,id,deleted_at,NULL',
+                'count' => 'required|integer|min:1|max:100',
+                'description' => 'nullable|string|max:255',
+                'max_uses' => 'nullable|integer|min:0|max:1000000',
+                'expires_at' => 'nullable|date|after:now',
+                'code_length' => 'nullable|integer|min:4|max:20',
+            ], [
+                'customer_group_id.required' => '请选择客户分组',
+                'customer_group_id.exists' => '客户分组不存在或已删除',
+                'count.required' => '请输入生成数量',
+                'count.min' => '生成数量至少为 1',
+                'count.max' => '单次最多生成 100 个邀请码',
+                'code_length.min' => '邀请码长度不能少于 4 个字符',
+                'code_length.max' => '邀请码长度不能超过 20 个字符',
+                'expires_at.after' => '过期时间必须晚于当前时间',
             ]);
+
+            $codes = $this->service->batchGenerate($validated);
+            $count = $codes->count();
+
+            $formattedCodes = $codes->map(fn ($code) => $this->service->formatInvitationCode($code));
+
+            return response()->json([
+                'message' => "成功生成 {$count} 个邀请码",
+                'data' => $formattedCodes,
+            ], 201);
+        } catch (ValidationException $e) {
+            return response()->json([
+                'message' => '数据验证失败',
+                'error_code' => InvitationCodeException::VALIDATION_ERROR,
+                'errors' => $e->errors(),
+            ], 422);
+        } catch (InvitationCodeException $e) {
+            return $e->render();
+        } catch (Throwable $e) {
+            report($e);
+            return response()->json([
+                'message' => '批量生成邀请码失败',
+                'error_code' => InvitationCodeException::CODE_APPLY_FAILED,
+            ], 500);
         }
-
-        $codes = collect($codes)->map(fn ($code) => $this->formatInvitationCode($code->load(['customerGroup' => fn ($q) => $q->withTrashed()])));
-
-        return response()->json([
-            'message' => "成功生成 {$count} 个邀请码",
-            'data' => $codes,
-        ], 201);
     }
 
     public function getByCustomerGroup(Request $request, CustomerGroup $customerGroup): JsonResponse
     {
-        $query = InvitationCode::forGroup($customerGroup->id)
-            ->with(['customerGroup' => fn ($q) => $q->withTrashed()]);
+        $this->service->authorize('viewAnyByCustomerGroup', InvitationCode::class);
 
-        if ($request->has('active') && $request->boolean('active')) {
-            $query->active();
-        }
+        $filters = $request->only(['status', 'active', 'include_trashed', 'only_trashed']);
 
         if ($request->has('include_inactive') && $request->boolean('include_inactive')) {
-            $query->withTrashed();
+            $filters['include_trashed'] = true;
         }
 
-        $codes = $query->orderByDesc('created_at')->get();
+        $codes = $this->service->getByCustomerGroup($customerGroup, $filters);
+
+        $formattedCodes = $codes->map(fn ($code) => $this->service->formatInvitationCode($code));
 
         return response()->json([
-            'data' => $codes->map(fn ($code) => $this->formatInvitationCode($code)),
+            'data' => $formattedCodes,
         ]);
     }
 
-    private function formatInvitationCode(InvitationCode $code): array
+    public function validate(Request $request): JsonResponse
     {
-        return [
-            'id' => $code->id,
-            'code' => $code->code,
-            'customer_group_id' => $code->customer_group_id,
-            'customer_group' => $code->customerGroup ? [
-                'id' => $code->customerGroup->id,
-                'name' => $code->customerGroup->name,
-                'code' => $code->customerGroup->code,
-                'is_active' => $code->customerGroup->is_active,
-                'deleted_at' => $code->customerGroup->deleted_at,
-            ] : null,
-            'description' => $code->description,
-            'max_uses' => $code->max_uses,
-            'used_count' => $code->used_count,
-            'remaining_uses' => $code->remaining_uses,
-            'uses_display' => $code->uses_display,
-            'expires_at' => $code->expires_at,
-            'is_active' => $code->is_active,
-            'is_valid' => $code->is_valid,
-            'is_expired' => $code->is_expired,
-            'is_used_up' => $code->is_used_up,
-            'deleted_at' => $code->deleted_at,
-            'created_at' => $code->created_at,
-            'updated_at' => $code->updated_at,
-        ];
+        try {
+            $validated = $request->validate([
+                'code' => 'required|string',
+            ]);
+
+            $result = $this->service->validateCode($validated['code']);
+
+            return response()->json([
+                'data' => $result,
+            ]);
+        } catch (ValidationException $e) {
+            return response()->json([
+                'message' => '数据验证失败',
+                'error_code' => InvitationCodeException::VALIDATION_ERROR,
+                'errors' => $e->errors(),
+            ], 422);
+        } catch (InvitationCodeException $e) {
+            return $e->render();
+        }
+    }
+
+    public function restore(Request $request, int $id): JsonResponse
+    {
+        $this->service->authorize('delete', InvitationCode::class);
+
+        try {
+            $invitationCode = $this->service->restore($id);
+
+            return response()->json([
+                'message' => '邀请码恢复成功',
+                'data' => $this->service->formatInvitationCode($invitationCode),
+            ]);
+        } catch (InvitationCodeException $e) {
+            return $e->render();
+        }
     }
 }

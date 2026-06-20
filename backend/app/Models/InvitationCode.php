@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Exceptions\InvitationCodeException;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -13,6 +14,18 @@ class InvitationCode extends Model
 {
     use HasFactory, SoftDeletes;
 
+    public const DEFAULT_CODE_LENGTH = 8;
+    public const MIN_CODE_LENGTH = 4;
+    public const MAX_CODE_LENGTH = 20;
+
+    public const UNLIMITED_USES = 0;
+
+    public const STATUS_ACTIVE = 'active';
+    public const STATUS_INACTIVE = 'inactive';
+    public const STATUS_EXPIRED = 'expired';
+    public const STATUS_USED_UP = 'used_up';
+    public const STATUS_DELETED = 'deleted';
+
     protected $casts = [
         'is_active' => 'boolean',
         'expires_at' => 'datetime',
@@ -23,17 +36,37 @@ class InvitationCode extends Model
     protected static function booted(): void
     {
         static::creating(function (InvitationCode $invitationCode) {
+            $codeLength = $invitationCode->getAttribute('code_length') ?? self::DEFAULT_CODE_LENGTH;
             if (empty($invitationCode->code)) {
-                $invitationCode->code = self::generateCode();
+                $invitationCode->code = self::generateCode($codeLength);
+            }
+        });
+
+        static::saving(function (InvitationCode $invitationCode) {
+            if ($invitationCode->isDirty('code')) {
+                $invitationCode->code = strtoupper(trim($invitationCode->code));
+            }
+            if ($invitationCode->getAttribute('code_length')) {
+                $invitationCode->offsetUnset('code_length');
             }
         });
     }
 
-    public static function generateCode(int $length = 8): string
+    public static function generateCode(int $length = self::DEFAULT_CODE_LENGTH): string
     {
+        $length = max(self::MIN_CODE_LENGTH, min($length, self::MAX_CODE_LENGTH));
+
+        $maxAttempts = 100;
+        $attempt = 0;
+
         do {
+            $attempt++;
             $code = strtoupper(Str::random($length));
-        } while (self::withTrashed()->where('code', $code)->exists());
+        } while (self::withTrashed()->where('code', $code)->exists() && $attempt < $maxAttempts);
+
+        if ($attempt >= $maxAttempts) {
+            throw InvitationCodeException::applyFailed('邀请码生成失败，请重试或增加码长');
+        }
 
         return $code;
     }
@@ -61,9 +94,36 @@ class InvitationCode extends Model
             ->where('expires_at', '<=', now());
     }
 
+    public function scopeUsedUp($query)
+    {
+        return $query->where('max_uses', '>', 0)
+            ->whereColumn('used_count', '>=', 'max_uses');
+    }
+
+    public function scopeNotUsedUp($query)
+    {
+        return $query->where(function ($q) {
+            $q->where('max_uses', self::UNLIMITED_USES)
+                ->orWhereColumn('used_count', '<', 'max_uses');
+        });
+    }
+
+    public function scopeValid($query)
+    {
+        return $query->active()->notUsedUp();
+    }
+
     public function scopeForGroup($query, $customerGroupId)
     {
         return $query->where('customer_group_id', $customerGroupId);
+    }
+
+    public function scopeSearch($query, string $keyword)
+    {
+        return $query->where(function ($q) use ($keyword) {
+            $q->where('code', 'like', "%{$keyword}%")
+                ->orWhere('description', 'like', "%{$keyword}%");
+        });
     }
 
     public function customerGroup()
@@ -86,21 +146,39 @@ class InvitationCode extends Model
         )->withTimestamps();
     }
 
+    public function getStatusAttribute(): string
+    {
+        if ($this->trashed()) {
+            return self::STATUS_DELETED;
+        }
+        if ($this->is_used_up) {
+            return self::STATUS_USED_UP;
+        }
+        if ($this->is_expired) {
+            return self::STATUS_EXPIRED;
+        }
+        if (! $this->is_active) {
+            return self::STATUS_INACTIVE;
+        }
+
+        return self::STATUS_ACTIVE;
+    }
+
+    public function getStatusLabelAttribute(): string
+    {
+        return match ($this->status) {
+            self::STATUS_ACTIVE => '有效',
+            self::STATUS_INACTIVE => '已禁用',
+            self::STATUS_EXPIRED => '已过期',
+            self::STATUS_USED_UP => '已用完',
+            self::STATUS_DELETED => '已删除',
+            default => '未知',
+        };
+    }
+
     public function getIsValidAttribute(): bool
     {
-        if (! $this->is_active) {
-            return false;
-        }
-
-        if ($this->expires_at && $this->expires_at->isPast()) {
-            return false;
-        }
-
-        if ($this->max_uses > 0 && $this->used_count >= $this->max_uses) {
-            return false;
-        }
-
-        return true;
+        return $this->status === self::STATUS_ACTIVE;
     }
 
     public function getIsExpiredAttribute(): bool
@@ -113,9 +191,14 @@ class InvitationCode extends Model
         return $this->max_uses > 0 && $this->used_count >= $this->max_uses;
     }
 
+    public function getIsUnlimitedAttribute(): bool
+    {
+        return $this->max_uses <= 0;
+    }
+
     public function getRemainingUsesAttribute(): ?int
     {
-        if ($this->max_uses <= 0) {
+        if ($this->is_unlimited) {
             return null;
         }
 
@@ -124,31 +207,68 @@ class InvitationCode extends Model
 
     public function getUsesDisplayAttribute(): string
     {
-        if ($this->max_uses <= 0) {
+        if ($this->is_unlimited) {
             return "{$this->used_count} / 不限";
         }
 
         return "{$this->used_count} / {$this->max_uses}";
     }
 
-    public function apply(User $user): bool
+    public function getRemainingPercentAttribute(): ?float
     {
-        if (! $this->is_valid) {
-            return false;
+        if ($this->is_unlimited || $this->max_uses <= 0) {
+            return null;
         }
 
-        if ($this->usages()->where('user_id', $user->id)->exists()) {
-            return false;
+        return round(($this->remaining_uses / $this->max_uses) * 100, 2);
+    }
+
+    public function hasBeenUsedBy(User $user): bool
+    {
+        return $this->usages()->where('user_id', $user->id)->exists();
+    }
+
+    public function validateRedeemableBy(User $user): void
+    {
+        switch ($this->status) {
+            case self::STATUS_EXPIRED:
+                throw InvitationCodeException::expired();
+            case self::STATUS_USED_UP:
+                throw InvitationCodeException::usedUp();
+            case self::STATUS_INACTIVE:
+                throw InvitationCodeException::inactive();
+            case self::STATUS_DELETED:
+                throw InvitationCodeException::notFound();
+        }
+
+        if (! $this->is_valid) {
+            throw InvitationCodeException::invalid();
+        }
+
+        if ($this->hasBeenUsedBy($user)) {
+            throw InvitationCodeException::alreadyUsed();
+        }
+    }
+
+    public function applyTo(User $user): void
+    {
+        $this->validateRedeemableBy($user);
+
+        $customerGroup = $this->customerGroup;
+        if (! $customerGroup) {
+            throw InvitationCodeException::customerGroupNotFound();
         }
 
         $this->usages()->create(['user_id' => $user->id]);
         $this->increment('used_count');
 
-        $customerGroup = CustomerGroup::find($this->customer_group_id);
-        if ($customerGroup) {
-            $customerGroup->models()->syncWithoutDetaching([$user->id]);
-        }
+        $customerGroup->models()->syncWithoutDetaching([$user->id]);
+    }
 
-        return true;
+    public function toggleIsActive(): bool
+    {
+        return $this->update([
+            'is_active' => ! $this->is_active,
+        ]);
     }
 }
