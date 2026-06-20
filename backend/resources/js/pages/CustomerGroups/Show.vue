@@ -145,7 +145,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useCustomerGroupsStore } from '../../stores/customerGroups';
 
@@ -198,7 +198,8 @@ const showMessage = (text, type) => {
     }, 3000);
 };
 
-onMounted(async () => {
+const loadData = async () => {
+    loading.value = true;
     try {
         await store.fetchDetail(id.value);
     } catch (error) {
@@ -206,5 +207,15 @@ onMounted(async () => {
     } finally {
         loading.value = false;
     }
+};
+
+watch(() => route.params.id, (newId) => {
+    if (newId) {
+        loadData();
+    }
+});
+
+onMounted(() => {
+    loadData();
 });
 </script>

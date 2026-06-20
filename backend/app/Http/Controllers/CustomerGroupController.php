@@ -62,7 +62,7 @@ class CustomerGroupController extends Controller
 
         return response()->json([
             'message' => '客户分组更新成功',
-            'data' => $customerGroup,
+            'data' => $customerGroup->fresh(),
         ]);
     }
 
@@ -83,7 +83,7 @@ class CustomerGroupController extends Controller
 
         return response()->json([
             'message' => '客户分组状态更新成功',
-            'data' => $customerGroup,
+            'data' => $customerGroup->fresh(),
         ]);
     }
 

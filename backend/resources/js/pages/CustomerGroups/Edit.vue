@@ -146,7 +146,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue';
+import { ref, reactive, onMounted, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useCustomerGroupsStore } from '../../stores/customerGroups';
 
@@ -238,7 +238,8 @@ const handleSubmit = async () => {
     }
 };
 
-onMounted(async () => {
+const loadData = async () => {
+    loading.value = true;
     try {
         await store.fetchDetail(route.params.id);
         loadFormData();
@@ -247,5 +248,15 @@ onMounted(async () => {
     } finally {
         loading.value = false;
     }
+};
+
+watch(() => route.params.id, (newId) => {
+    if (newId) {
+        loadData();
+    }
+});
+
+onMounted(() => {
+    loadData();
 });
 </script>

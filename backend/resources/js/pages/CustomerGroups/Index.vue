@@ -229,17 +229,29 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import { useCustomerGroupsStore } from '../stores/customerGroups';
 
 const store = useCustomerGroupsStore();
-const search = ref('');
-const activeOnly = ref(false);
+const search = ref(store.search);
+const activeOnly = ref(store.activeOnly);
 const showDeleteModal = ref(false);
 const itemToDelete = ref(null);
 const message = ref(null);
 
 let searchTimeout = null;
+
+watch(() => store.search, (val) => {
+    if (val !== search.value) {
+        search.value = val;
+    }
+});
+
+watch(() => store.activeOnly, (val) => {
+    if (val !== activeOnly.value) {
+        activeOnly.value = val;
+    }
+});
 
 const visiblePages = computed(() => {
     const pages = [];

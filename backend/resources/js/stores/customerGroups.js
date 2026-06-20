@@ -57,6 +57,7 @@ export const useCustomerGroupsStore = defineStore('customerGroups', {
                 this.loading = true;
                 const response = await customerGroupsApi.show(id);
                 this.currentItem = response.data.data;
+                this._syncItemInList(response.data.data);
                 return response.data.data;
             } catch (error) {
                 console.error('获取客户分组详情失败:', error);
@@ -70,7 +71,10 @@ export const useCustomerGroupsStore = defineStore('customerGroups', {
             try {
                 this.loading = true;
                 const response = await customerGroupsApi.store(data);
-                await this.fetchList();
+                await Promise.all([
+                    this.fetchList(),
+                    this._refreshAllItems(),
+                ]);
                 return response.data.data;
             } catch (error) {
                 console.error('创建客户分组失败:', error);
@@ -84,8 +88,16 @@ export const useCustomerGroupsStore = defineStore('customerGroups', {
             try {
                 this.loading = true;
                 const response = await customerGroupsApi.update(id, data);
-                await this.fetchList();
-                return response.data.data;
+                const updated = response.data.data;
+                this._syncItemInList(updated);
+                if (this.currentItem && this.currentItem.id === id) {
+                    this.currentItem = { ...this.currentItem, ...updated };
+                }
+                await Promise.all([
+                    this.fetchList(),
+                    this._refreshAllItems(),
+                ]);
+                return updated;
             } catch (error) {
                 console.error('更新客户分组失败:', error);
                 throw error;
@@ -98,6 +110,11 @@ export const useCustomerGroupsStore = defineStore('customerGroups', {
             try {
                 this.loading = true;
                 await customerGroupsApi.destroy(id);
+                this._removeItemFromList(id);
+                if (this.currentItem && this.currentItem.id === id) {
+                    this.currentItem = null;
+                }
+                this._removeItemFromAll(id);
                 await this.fetchList();
             } catch (error) {
                 console.error('删除客户分组失败:', error);
@@ -110,11 +127,13 @@ export const useCustomerGroupsStore = defineStore('customerGroups', {
         async toggleActive(id) {
             try {
                 const response = await customerGroupsApi.toggleActive(id);
-                const index = this.items.findIndex(item => item.id === id);
-                if (index !== -1) {
-                    this.items[index] = response.data.data;
+                const updated = response.data.data;
+                this._syncItemInList(updated);
+                if (this.currentItem && this.currentItem.id === id) {
+                    this.currentItem = { ...this.currentItem, ...updated };
                 }
-                return response.data.data;
+                this._syncItemInAll(updated);
+                return updated;
             } catch (error) {
                 console.error('切换状态失败:', error);
                 throw error;
@@ -162,6 +181,47 @@ export const useCustomerGroupsStore = defineStore('customerGroups', {
 
         resetCurrentItem() {
             this.currentItem = null;
+        },
+
+        _syncItemInList(updated) {
+            if (!updated || !updated.id) return;
+            const index = this.items.findIndex(item => item.id === updated.id);
+            if (index !== -1) {
+                this.items[index] = { ...this.items[index], ...updated };
+            }
+        },
+
+        _removeItemFromList(id) {
+            const index = this.items.findIndex(item => item.id === id);
+            if (index !== -1) {
+                this.items.splice(index, 1);
+            }
+        },
+
+        _syncItemInAll(updated) {
+            if (!updated || !updated.id) return;
+            const index = this.allItems.findIndex(item => item.id === updated.id);
+            if (index !== -1) {
+                this.allItems[index] = { ...this.allItems[index], ...updated };
+            } else if (updated.is_active) {
+                this.allItems.push(updated);
+            }
+        },
+
+        _removeItemFromAll(id) {
+            const index = this.allItems.findIndex(item => item.id === id);
+            if (index !== -1) {
+                this.allItems.splice(index, 1);
+            }
+        },
+
+        async _refreshAllItems() {
+            try {
+                const response = await customerGroupsApi.all();
+                this.allItems = response.data.data;
+            } catch {
+                //
+            }
         },
     },
 });
