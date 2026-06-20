@@ -24,8 +24,31 @@ class ProductCustomerGroupPriceController extends Controller
 
         $prices = $query->paginate($request->input('per_page', 15));
 
+        $items = collect($prices->items())->map(function ($price) {
+            return [
+                'id' => $price->id,
+                'product_id' => $price->product_id,
+                'product' => $price->product ? [
+                    'id' => $price->product->id,
+                    'name' => $price->product->name,
+                    'sku' => $price->product->sku,
+                    'base_price' => $price->product->base_price,
+                ] : null,
+                'customer_group_id' => $price->customer_group_id,
+                'customer_group' => $price->customerGroup ? [
+                    'id' => $price->customerGroup->id,
+                    'name' => $price->customerGroup->name,
+                    'code' => $price->customerGroup->code,
+                ] : null,
+                'price' => $price->price,
+                'formatted_price' => $price->formatted_price,
+                'created_at' => $price->created_at,
+                'updated_at' => $price->updated_at,
+            ];
+        });
+
         return response()->json([
-            'data' => $prices->items(),
+            'data' => $items,
             'pagination' => [
                 'total' => $prices->total(),
                 'per_page' => $prices->perPage(),
@@ -81,12 +104,21 @@ class ProductCustomerGroupPriceController extends Controller
 
     public function getByProduct(Product $product): JsonResponse
     {
-        $prices = $product->customerGroupPrices()
-            ->with('customerGroup')
-            ->get();
+        $allPrices = $product->getAllCustomerGroupPrices();
+        $rawPrices = $product->customerGroupPrices()->with('customerGroup')->get();
 
         return response()->json([
-            'data' => $prices,
+            'data' => [
+                'product' => [
+                    'id' => $product->id,
+                    'name' => $product->name,
+                    'sku' => $product->sku,
+                    'base_price' => $product->base_price,
+                    'formatted_base_price' => number_format($product->base_price, 2, '.', ''),
+                ],
+                'prices' => $allPrices,
+                'raw_prices' => $rawPrices,
+            ],
         ]);
     }
 

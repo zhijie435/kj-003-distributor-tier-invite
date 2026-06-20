@@ -26,10 +26,33 @@ class ProductController extends Controller
             });
         }
 
+        if ($request->has('with_prices') && $request->boolean('with_prices')) {
+            $customerGroupId = $request->input('customer_group_id');
+            $query->withPrices($customerGroupId);
+        }
+
         $products = $query->ordered()->paginate($request->input('per_page', 15));
 
+        $items = collect($products->items())->map(function ($product) {
+            return [
+                'id' => $product->id,
+                'name' => $product->name,
+                'sku' => $product->sku,
+                'description' => $product->description,
+                'base_price' => $product->base_price,
+                'formatted_base_price' => number_format($product->base_price, 2, '.', ''),
+                'is_active' => $product->is_active,
+                'sort_order' => $product->sort_order,
+                'created_at' => $product->created_at,
+                'updated_at' => $product->updated_at,
+                'customer_group_prices' => $product->relationLoaded('customerGroupPrices')
+                    ? $product->customerGroupPrices
+                    : null,
+            ];
+        });
+
         return response()->json([
-            'data' => $products->items(),
+            'data' => $items,
             'pagination' => [
                 'total' => $products->total(),
                 'per_page' => $products->perPage(),
@@ -51,8 +74,23 @@ class ProductController extends Controller
 
     public function show(Product $product): JsonResponse
     {
+        $product->load('customerGroupPrices.customerGroup');
+
         return response()->json([
-            'data' => $product->load('customerGroupPrices.customerGroup'),
+            'data' => [
+                'id' => $product->id,
+                'name' => $product->name,
+                'sku' => $product->sku,
+                'description' => $product->description,
+                'base_price' => $product->base_price,
+                'formatted_base_price' => number_format($product->base_price, 2, '.', ''),
+                'is_active' => $product->is_active,
+                'sort_order' => $product->sort_order,
+                'created_at' => $product->created_at,
+                'updated_at' => $product->updated_at,
+                'customer_group_prices' => $product->getAllCustomerGroupPrices(),
+                'raw_prices' => $product->customerGroupPrices,
+            ],
         ]);
     }
 
@@ -87,12 +125,35 @@ class ProductController extends Controller
         ]);
     }
 
-    public function all(): JsonResponse
+    public function all(Request $request): JsonResponse
     {
-        $products = Product::active()->ordered()->get(['id', 'name', 'sku', 'base_price']);
+        $query = Product::active()->ordered();
+
+        if ($request->has('with_prices') && $request->boolean('with_prices')) {
+            $customerGroupId = $request->input('customer_group_id');
+            $query->withPrices($customerGroupId);
+        }
+
+        $products = $query->get();
+
+        $items = $products->map(function ($product) {
+            $data = [
+                'id' => $product->id,
+                'name' => $product->name,
+                'sku' => $product->sku,
+                'base_price' => $product->base_price,
+                'formatted_base_price' => number_format($product->base_price, 2, '.', ''),
+            ];
+
+            if ($product->relationLoaded('customerGroupPrices')) {
+                $data['customer_group_prices'] = $product->customerGroupPrices;
+            }
+
+            return $data;
+        });
 
         return response()->json([
-            'data' => $products,
+            'data' => $items,
         ]);
     }
 }
