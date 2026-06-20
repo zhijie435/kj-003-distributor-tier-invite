@@ -15,7 +15,7 @@ class ProductRequest extends FormRequest
     {
         return [
             'name' => 'required|string|max:255',
-            'sku' => 'required|string|max:100|unique:products,sku,'.$this->route('product'),
+            'sku' => 'required|string|max:100|unique:products,sku,'.optional($this->route('product'))->id,
             'description' => 'nullable|string',
             'base_price' => 'numeric|min:0',
             'is_active' => 'boolean',

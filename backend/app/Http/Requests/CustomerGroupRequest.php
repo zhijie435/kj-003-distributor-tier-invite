@@ -15,7 +15,7 @@ class CustomerGroupRequest extends FormRequest
     {
         return [
             'name' => 'required|string|max:255',
-            'code' => 'required|string|max:100|unique:customer_groups,code,'.$this->route('customer_group'),
+            'code' => 'required|string|max:100|unique:customer_groups,code,'.optional($this->route('customerGroup'))->id,
             'description' => 'nullable|string',
             'is_active' => 'boolean',
             'sort_order' => 'integer|min:0',
