@@ -84,6 +84,36 @@
                     </div>
                     <p v-else class="text-sm text-gray-500">暂无配置参数</p>
                 </div>
+
+                <div class="card p-6">
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="text-lg font-medium text-gray-900">邀请码</h3>
+                        <router-link :to="`/invitation-codes/create`" class="text-sm text-primary hover:text-primary-hover">
+                            + 新建邀请码
+                        </router-link>
+                    </div>
+                    <div v-if="invitationCodes.length > 0" class="space-y-2">
+                        <div
+                            v-for="code in invitationCodes"
+                            :key="code.id"
+                            class="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
+                        >
+                            <div class="flex items-center space-x-3">
+                                <code class="text-sm font-mono text-indigo-700 bg-indigo-50 px-2 py-1 rounded">{{ code.code }}</code>
+                                <span class="badge text-xs" :class="code.is_valid ? 'badge-success' : 'badge-danger'">
+                                    {{ code.is_valid ? '有效' : '无效' }}
+                                </span>
+                            </div>
+                            <div class="text-sm text-gray-500">
+                                {{ code.uses_display }}
+                                <span v-if="code.expires_at" class="ml-2 text-xs" :class="code.is_expired ? 'text-red-500' : 'text-gray-400'">
+                                    {{ code.is_expired ? '已过期' : '到期: ' + formatDate(code.expires_at) }}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                    <p v-else class="text-sm text-gray-500">暂无邀请码</p>
+                </div>
             </div>
 
             <div class="space-y-6">
@@ -148,6 +178,7 @@
 import { ref, computed, onMounted, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useCustomerGroupsStore } from '../../stores/customerGroups';
+import { customerGroupsApi } from '../../api';
 
 const route = useRoute();
 const router = useRouter();
@@ -156,6 +187,7 @@ const store = useCustomerGroupsStore();
 const loading = ref(true);
 const showDeleteModal = ref(false);
 const message = ref(null);
+const invitationCodes = ref([]);
 
 const id = computed(() => route.params.id);
 const item = computed(() => store.currentItem);
@@ -202,6 +234,8 @@ const loadData = async () => {
     loading.value = true;
     try {
         await store.fetchDetail(id.value);
+        const res = await customerGroupsApi.invitationCodes(id.value);
+        invitationCodes.value = res.data.data || [];
     } catch (error) {
         router.push('/');
     } finally {

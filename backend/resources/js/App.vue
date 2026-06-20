@@ -24,6 +24,13 @@
                         >
                             新建分组
                         </router-link>
+                        <router-link
+                            to="/invitation-codes"
+                            class="text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium transition-colors"
+                            :class="{ 'bg-gray-100 text-gray-900': $route.name?.startsWith('InvitationCode') }"
+                        >
+                            邀请码
+                        </router-link>
                     </nav>
                 </div>
             </div>

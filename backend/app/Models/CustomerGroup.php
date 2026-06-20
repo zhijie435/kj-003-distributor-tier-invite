@@ -38,6 +38,16 @@ class CustomerGroup extends Model
         );
     }
 
+    public function invitationCodes()
+    {
+        return $this->hasMany(InvitationCode::class);
+    }
+
+    public function activeInvitationCodes()
+    {
+        return $this->hasMany(InvitationCode::class)->active();
+    }
+
     protected static function booted(): void
     {
         $cacheStore = config('customer_groups.cache.store') != 'default' ? config('customer_groups.cache.store') : null;

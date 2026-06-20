@@ -40,4 +40,14 @@ class User extends Authenticatable
             config('customer_groups.column_names.customer_group_pivot_key') ?? 'customer_group_id'
         );
     }
+
+    public function invitationCodes()
+    {
+        return $this->belongsToMany(
+            InvitationCode::class,
+            'invitation_code_usages',
+            'user_id',
+            'invitation_code_id'
+        )->withTimestamps();
+    }
 }
