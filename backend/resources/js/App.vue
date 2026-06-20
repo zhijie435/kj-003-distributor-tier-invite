@@ -11,14 +11,14 @@
                     </div>
                     <nav class="flex space-x-4">
                         <router-link
-                            to="/customer-groups"
+                            to="/"
                             class="text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium transition-colors"
                             :class="{ 'bg-gray-100 text-gray-900': $route.name === 'CustomerGroups' }"
                         >
                             分组列表
                         </router-link>
                         <router-link
-                            to="/customer-groups/create"
+                            to="/create"
                             class="text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium transition-colors"
                             :class="{ 'bg-gray-100 text-gray-900': $route.name === 'CustomerGroupCreate' }"
                         >

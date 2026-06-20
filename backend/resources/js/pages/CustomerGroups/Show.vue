@@ -2,7 +2,7 @@
     <div class="space-y-6">
         <div class="flex items-center justify-between">
             <div class="flex items-center space-x-4">
-                <router-link to="/customer-groups" class="text-gray-500 hover:text-gray-700">
+                <router-link to="/" class="text-gray-500 hover:text-gray-700">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
                     </svg>
@@ -10,7 +10,7 @@
                 <h2 class="text-2xl font-bold text-gray-900">客户分组详情</h2>
             </div>
             <div class="flex space-x-3">
-                <router-link :to="`/customer-groups/${id}/edit`" class="btn btn-primary">
+                <router-link :to="`/${id}/edit`" class="btn btn-primary">
                     编辑
                 </router-link>
             </div>
@@ -24,22 +24,22 @@
             <div class="lg:col-span-2 space-y-6">
                 <div class="card p-6">
                     <h3 class="text-lg font-medium text-gray-900 mb-4">基本信息</h3>
-                    <dl class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div>
+                    <dl class="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
+                        <div class="sm:col-span-1">
                             <dt class="text-sm font-medium text-gray-500">分组名称</dt>
                             <dd class="mt-1 text-sm text-gray-900">{{ item.name }}</dd>
                         </div>
-                        <div>
+                        <div class="sm:col-span-1">
                             <dt class="text-sm font-medium text-gray-500">分组代码</dt>
                             <dd class="mt-1">
                                 <code class="text-sm text-gray-600 bg-gray-100 px-2 py-1 rounded">{{ item.code }}</code>
                             </dd>
                         </div>
-                        <div>
+                        <div class="sm:col-span-1">
                             <dt class="text-sm font-medium text-gray-500">排序</dt>
                             <dd class="mt-1 text-sm text-gray-900">{{ item.sort_order }}</dd>
                         </div>
-                        <div>
+                        <div class="sm:col-span-1">
                             <dt class="text-sm font-medium text-gray-500">状态</dt>
                             <dd class="mt-1">
                                 <span class="badge" :class="item.is_active ? 'badge-success' : 'badge-danger'">
@@ -47,15 +47,15 @@
                                 </span>
                             </dd>
                         </div>
-                        <div class="md:col-span-2">
+                        <div class="sm:col-span-2">
                             <dt class="text-sm font-medium text-gray-500">描述</dt>
                             <dd class="mt-1 text-sm text-gray-900">{{ item.description || '-' }}</dd>
                         </div>
-                        <div>
+                        <div class="sm:col-span-1">
                             <dt class="text-sm font-medium text-gray-500">创建时间</dt>
                             <dd class="mt-1 text-sm text-gray-900">{{ formatDate(item.created_at) }}</dd>
                         </div>
-                        <div>
+                        <div class="sm:col-span-1">
                             <dt class="text-sm font-medium text-gray-500">更新时间</dt>
                             <dd class="mt-1 text-sm text-gray-900">{{ formatDate(item.updated_at) }}</dd>
                         </div>
@@ -138,7 +138,7 @@
             </div>
         </div>
 
-        <div v-if="message" class="fixed bottom-4 right-4 z-50" :class="message.type === 'success' ? 'bg-emerald-500' : 'bg-red-500'" class="text-white px-6 py-3 rounded-lg shadow-lg">
+        <div v-if="message" class="fixed bottom-4 right-4 z-50 text-white px-6 py-3 rounded-lg shadow-lg" :class="message.type === 'success' ? 'bg-emerald-500' : 'bg-red-500'">
             {{ message.text }}
         </div>
     </div>
@@ -184,7 +184,7 @@ const deleteItem = async () => {
         showDeleteModal.value = false;
         showMessage('删除成功', 'success');
         setTimeout(() => {
-            router.push('/customer-groups');
+            router.push('/');
         }, 1000);
     } catch (error) {
         showMessage('删除失败', 'error');
@@ -202,7 +202,7 @@ onMounted(async () => {
     try {
         await store.fetchDetail(id.value);
     } catch (error) {
-        router.push('/customer-groups');
+        router.push('/');
     } finally {
         loading.value = false;
     }

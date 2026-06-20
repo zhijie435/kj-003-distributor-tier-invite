@@ -2,7 +2,7 @@
     <div class="space-y-6">
         <div class="flex justify-between items-center">
             <h2 class="text-2xl font-bold text-gray-900">客户分组列表</h2>
-            <router-link to="/customer-groups/create" class="btn btn-primary">
+            <router-link to="/create" class="btn btn-primary">
                 <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
                 </svg>
@@ -40,7 +40,7 @@
         </div>
 
         <div v-else class="card overflow-hidden">
-            <div class="overflow-x-auto">
+            <div class="hidden md:block overflow-x-auto">
                 <table class="min-w-full divide-y divide-gray-200">
                     <thead class="bg-gray-50">
                         <tr>
@@ -77,13 +77,13 @@
                             </td>
                             <td class="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
                                 <router-link
-                                    :to="`/customer-groups/${item.id}`"
+                                    :to="`/${item.id}`"
                                     class="text-blue-600 hover:text-blue-900"
                                 >
                                     查看
                                 </router-link>
                                 <router-link
-                                    :to="`/customer-groups/${item.id}/edit`"
+                                    :to="`/${item.id}/edit`"
                                     class="text-indigo-600 hover:text-indigo-900"
                                 >
                                     编辑
@@ -102,7 +102,7 @@
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
                                 </svg>
                                 <p class="mt-2">暂无客户分组数据</p>
-                                <router-link to="/customer-groups/create" class="btn btn-primary mt-4">
+                                <router-link to="/create" class="btn btn-primary mt-4">
                                     创建第一个分组
                                 </router-link>
                             </td>
@@ -111,19 +111,77 @@
                 </table>
             </div>
 
-            <div v-if="store.pagination.last_page > 1" class="bg-white px-4 py-3 flex items-center justify-between border-t border-gray-200 sm:px-6">
-                <div class="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
-                    <div>
+            <div class="md:hidden space-y-4 p-4">
+                <div
+                    v-for="item in store.items"
+                    :key="item.id"
+                    class="border border-gray-200 rounded-lg p-4 space-y-3 bg-white"
+                >
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <h3 class="text-base font-medium text-gray-900">{{ item.name }}</h3>
+                            <code class="text-xs text-gray-600 bg-gray-100 px-2 py-0.5 rounded">{{ item.code }}</code>
+                        </div>
+                        <button
+                            @click="toggleActive(item)"
+                            class="badge cursor-pointer transition-opacity hover:opacity-80 text-xs"
+                            :class="item.is_active ? 'badge-success' : 'badge-danger'"
+                        >
+                            {{ item.is_active ? '启用' : '禁用' }}
+                        </button>
+                    </div>
+                    <div v-if="item.description" class="text-sm text-gray-500">
+                        {{ item.description }}
+                    </div>
+                    <div class="flex justify-between items-center text-sm">
+                        <span class="text-gray-500">排序: {{ item.sort_order }}</span>
+                    </div>
+                    <div class="flex justify-end space-x-3 pt-2 border-t border-gray-100">
+                        <router-link
+                            :to="`/${item.id}`"
+                            class="text-blue-600 hover:text-blue-900 text-sm font-medium"
+                        >
+                            查看
+                        </router-link>
+                        <router-link
+                            :to="`/${item.id}/edit`"
+                            class="text-indigo-600 hover:text-indigo-900 text-sm font-medium"
+                        >
+                            编辑
+                        </router-link>
+                        <button
+                            @click="confirmDelete(item)"
+                            class="text-red-600 hover:text-red-900 text-sm font-medium"
+                        >
+                            删除
+                        </button>
+                    </div>
+                </div>
+                <div v-if="store.items.length === 0" class="text-center py-12 text-gray-500">
+                    <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
+                    </svg>
+                    <p class="mt-2">暂无客户分组数据</p>
+                    <router-link to="/create" class="btn btn-primary mt-4">
+                        创建第一个分组
+                    </router-link>
+                </div>
+            </div>
+
+            <div v-if="store.pagination.last_page > 1" class="bg-white px-4 py-3 flex flex-col sm:flex-row items-center justify-between border-t border-gray-200 sm:px-6 gap-4">
+                <div class="flex-1 w-full flex flex-col sm:flex-row items-center justify-between gap-4">
+                    <div class="text-center sm:text-left">
                         <p class="text-sm text-gray-700">
-                            共 <span class="font-medium">{{ store.pagination.total }}</span> 条记录
+                            共 <span class="font-medium">{{ store.pagination.total }}</span> 条记录，
+                            第 <span class="font-medium">{{ store.pagination.current_page }}</span> / <span class="font-medium">{{ store.pagination.last_page }}</span> 页
                         </p>
                     </div>
-                    <div>
-                        <nav class="relative z-0 inline-flex rounded-md shadow-sm -space-x-px">
+                    <div class="w-full sm:w-auto">
+                        <nav class="relative z-0 inline-flex rounded-md shadow-sm -space-x-px w-full sm:w-auto justify-center">
                             <button
                                 @click="store.setPage(store.pagination.current_page - 1)"
                                 :disabled="store.pagination.current_page === 1"
-                                class="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                                class="relative inline-flex items-center px-3 py-2 rounded-l-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed flex-1 sm:flex-none justify-center"
                             >
                                 上一页
                             </button>
@@ -131,7 +189,7 @@
                                 v-for="page in visiblePages"
                                 :key="page"
                                 @click="store.setPage(page)"
-                                class="relative inline-flex items-center px-4 py-2 border text-sm font-medium"
+                                class="relative inline-flex items-center px-4 py-2 border text-sm font-medium hidden sm:inline-flex"
                                 :class="page === store.pagination.current_page ? 'z-10 bg-primary border-primary text-white' : 'bg-white border-gray-300 text-gray-500 hover:bg-gray-50'"
                             >
                                 {{ page }}
@@ -139,7 +197,7 @@
                             <button
                                 @click="store.setPage(store.pagination.current_page + 1)"
                                 :disabled="store.pagination.current_page === store.pagination.last_page"
-                                class="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                                class="relative inline-flex items-center px-3 py-2 rounded-r-md border border-gray-300 bg-white text-sm font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed flex-1 sm:flex-none justify-center"
                             >
                                 下一页
                             </button>
@@ -164,7 +222,7 @@
             </div>
         </div>
 
-        <div v-if="message" class="fixed bottom-4 right-4 z-50" :class="message.type === 'success' ? 'bg-emerald-500' : 'bg-red-500'" class="text-white px-6 py-3 rounded-lg shadow-lg">
+        <div v-if="message" class="fixed bottom-4 right-4 z-50 text-white px-6 py-3 rounded-lg shadow-lg" :class="message.type === 'success' ? 'bg-emerald-500' : 'bg-red-500'">
             {{ message.text }}
         </div>
     </div>

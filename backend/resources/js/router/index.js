@@ -3,25 +3,25 @@ import { createRouter, createWebHistory } from 'vue-router';
 const routes = [
     {
         path: '/',
-        redirect: '/customer-groups',
+        redirect: '/',
     },
     {
-        path: '/customer-groups',
+        path: '/',
         name: 'CustomerGroups',
         component: () => import('../pages/CustomerGroups/Index.vue'),
     },
     {
-        path: '/customer-groups/create',
+        path: '/create',
         name: 'CustomerGroupCreate',
         component: () => import('../pages/CustomerGroups/Create.vue'),
     },
     {
-        path: '/customer-groups/:id/edit',
+        path: '/:id/edit',
         name: 'CustomerGroupEdit',
         component: () => import('../pages/CustomerGroups/Edit.vue'),
     },
     {
-        path: '/customer-groups/:id',
+        path: '/:id',
         name: 'CustomerGroupShow',
         component: () => import('../pages/CustomerGroups/Show.vue'),
     },
