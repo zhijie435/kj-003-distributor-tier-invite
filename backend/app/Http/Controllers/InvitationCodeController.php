@@ -267,7 +267,7 @@ class InvitationCodeController extends Controller
 
     public function restore(Request $request, int $id): JsonResponse
     {
-        $this->service->authorize('delete', InvitationCode::class);
+        $this->service->authorize('restore', InvitationCode::class);
 
         try {
             $invitationCode = $this->service->restore($id);

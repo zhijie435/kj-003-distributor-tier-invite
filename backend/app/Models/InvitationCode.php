@@ -9,7 +9,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Str;
 
-#[Fillable(['code', 'customer_group_id', 'description', 'max_uses', 'used_count', 'expires_at', 'is_active'])]
+#[Fillable(['code', 'customer_group_id', 'description', 'max_uses', 'used_count', 'expires_at', 'is_active', 'code_length'])]
 class InvitationCode extends Model
 {
     use HasFactory, SoftDeletes;
@@ -35,17 +35,17 @@ class InvitationCode extends Model
 
     protected static function booted(): void
     {
-        static::creating(function (InvitationCode $invitationCode) {
+        static::saving(function (InvitationCode $invitationCode) {
             $codeLength = $invitationCode->getAttribute('code_length') ?? self::DEFAULT_CODE_LENGTH;
-            if (empty($invitationCode->code)) {
+
+            if (empty($invitationCode->code) && ! $invitationCode->exists) {
                 $invitationCode->code = self::generateCode($codeLength);
             }
-        });
 
-        static::saving(function (InvitationCode $invitationCode) {
             if ($invitationCode->isDirty('code')) {
                 $invitationCode->code = strtoupper(trim($invitationCode->code));
             }
+
             if ($invitationCode->getAttribute('code_length')) {
                 $invitationCode->offsetUnset('code_length');
             }
@@ -255,7 +255,7 @@ class InvitationCode extends Model
         $this->validateRedeemableBy($user);
 
         $customerGroup = $this->customerGroup;
-        if (! $customerGroup) {
+        if (! $customerGroup || $customerGroup->trashed()) {
             throw InvitationCodeException::customerGroupNotFound();
         }
 

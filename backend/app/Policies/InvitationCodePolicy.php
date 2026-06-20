@@ -69,6 +69,11 @@ class InvitationCodePolicy
         return $this->viewAny($user);
     }
 
+    public function restore(User $user): bool
+    {
+        return $this->checkPermission($user, 'invitation-codes.delete');
+    }
+
     protected function checkPermission(User $user, string $permission): bool
     {
         if (method_exists($user, 'hasPermission')) {

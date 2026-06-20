@@ -200,7 +200,7 @@ class InvitationCodeService
                 $created[] = InvitationCode::create($baseData);
             }
 
-            return collect($created)->load([
+            return \Illuminate\Database\Eloquent\Collection::make($created)->load([
                 'customerGroup' => fn ($q) => $q->withTrashed(),
             ]);
         });
@@ -287,6 +287,12 @@ class InvitationCodeService
             }
 
             if ($valid && ! $invitationCode->customerGroup) {
+                $valid = false;
+                $errorCode = InvitationCodeException::CUSTOMER_GROUP_NOT_FOUND;
+                $errorMessage = '关联的客户分组不存在';
+            }
+
+            if ($valid && $invitationCode->customerGroup && $invitationCode->customerGroup->deleted_at) {
                 $valid = false;
                 $errorCode = InvitationCodeException::CUSTOMER_GROUP_NOT_FOUND;
                 $errorMessage = '关联的客户分组不存在';
